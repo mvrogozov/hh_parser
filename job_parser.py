@@ -6,6 +6,7 @@ from logging.handlers import RotatingFileHandler
 from typing import Callable
 
 import emoji
+import selenium
 from aiogram import Bot, types
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.dispatcher import Dispatcher
@@ -61,8 +62,11 @@ def parse(url: str) -> list:
     chrome_options.add_argument("--headless")
     # driver = webdriver.Chrome(options=chrome_options)
 
-    ser = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=ser, options=chrome_options)
+    try:
+        driver = webdriver.Chrome(options=chrome_options)
+    except selenium.common.exceptions.WebDriverException:
+        ser = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=ser, options=chrome_options)
 
     try:
         driver.get(url)
@@ -149,15 +153,10 @@ def tg_make_send_bot(
         emoji.emojize('Help :red_question_mark:'),
         callback_data='help'
     )
-    markup_kb = InlineKeyboardMarkup(row_width=3).row(
-        button_help,
+    markup_kb = InlineKeyboardMarkup(row_width=2).row(
         button_make_file,
         button_download_file
-    )
-
-    @dp.message_handler(commands=['1'])
-    async def process_command_1(message: types.Message):
-        await message.reply('1', reply_markup=markup_kb)
+    ).add(button_help)
 
     @dp.callback_query_handler(lambda c: c.data)
     async def process_callback_kb(callback_query: types.CallbackQuery):
@@ -165,6 +164,7 @@ def tg_make_send_bot(
             await process_help_command(
                 callback_query.message.reply_to_message
             )
+            await bot.answer_callback_query(callback_query.id)
         if callback_query.data == 'make_file':
             await process_make_file_command(
                 callback_query.message.reply_to_message
@@ -190,11 +190,15 @@ def tg_make_send_bot(
             '/makefile', '/downloadfile',
             sep='\n'
         )
-        await message.reply(
+        '''await message.reply(
             msg,
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=markup_kb
-        )
+        )'''
+        await bot.send_message(
+            message.from_user.id,
+            text=msg
+            )
 
     @dp.message_handler(commands=['downloadfile'])
     async def process_download_file_command(message: types.Message):
