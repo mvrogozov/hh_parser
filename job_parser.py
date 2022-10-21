@@ -41,7 +41,7 @@ TOKEN = os.getenv('TG_TOKEN')
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 handler = RotatingFileHandler(
-    filename='job_parser.log',
+    filename=LOG_FILE_NAME,
     maxBytes=5000000,
     backupCount=5
 )
@@ -54,19 +54,19 @@ logger.addHandler(handler)
 
 def parse(url: str) -> list:
     result_list: list = []
-    # ser = Service(ChromeDriverManager().install())
-    # driver = webdriver.Chrome(service=ser)
 
     chrome_options = Options()
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--headless")
-    # driver = webdriver.Chrome(options=chrome_options)
 
     try:
         driver = webdriver.Chrome(options=chrome_options)
-    except selenium.common.exceptions.WebDriverException:
+    except selenium.common.exceptions.WebDriverException as e:
+        logger.error(e)
         ser = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=ser, options=chrome_options)
+    else:
+        logger.info('Chrome driver started without errors.')
 
     try:
         driver.get(url)
@@ -162,17 +162,17 @@ def tg_make_send_bot(
     async def process_callback_kb(callback_query: types.CallbackQuery):
         if callback_query.data == 'help':
             await process_help_command(
-                callback_query.message.reply_to_message
+                callback_query.message
             )
             await bot.answer_callback_query(callback_query.id)
         if callback_query.data == 'make_file':
             await process_make_file_command(
-                callback_query.message.reply_to_message
+                callback_query.message
             )
             await bot.answer_callback_query(callback_query.id, text='Done')
         if callback_query.data == 'download_file':
             await process_download_file_command(
-                callback_query.message.reply_to_message
+                callback_query.message
             )
             await bot.answer_callback_query(callback_query.id, text='Done')
 
@@ -190,29 +190,28 @@ def tg_make_send_bot(
             '/makefile', '/downloadfile',
             sep='\n'
         )
-        '''await message.reply(
-            msg,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=markup_kb
-        )'''
         await bot.send_message(
-            message.from_user.id,
-            text=msg
+            message.chat.id,
+            text=msg,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=markup_kb
             )
 
     @dp.message_handler(commands=['downloadfile'])
     async def process_download_file_command(message: types.Message):
-        user_id = message.from_user.id
-        await bot.send_chat_action(user_id, ChatActions.UPLOAD_DOCUMENT)
+        await bot.send_chat_action(
+            message.chat.id,
+            ChatActions.UPLOAD_DOCUMENT
+        )
         await asyncio.sleep(1)
         try:
             file = InputFile(filename)
         except FileNotFoundError:
             logger.error('File to send not found')
-            await bot.send_message(message.from_user.id, 'Make file first.')
+            await bot.send_message(message.chat.id, 'Make file first.')
         else:
             await bot.send_document(
-                user_id,
+                message.chat.id,
                 file,
                 caption='file ready'
             )
@@ -221,7 +220,7 @@ def tg_make_send_bot(
     async def process_make_file_command(message: types.Message):
         func_to_exec()
         await asyncio.sleep(1)
-        await bot.send_message(message.from_user.id, 'Done')
+        await bot.send_message(message.chat.id, 'Done')
 
     @dp.message_handler(commands=['log'])
     async def process_get_log_file(message: types.Message):
@@ -242,7 +241,7 @@ def tg_make_send_bot(
         message_text = text(
             emoji.emojize('Я не знаю, что с этим делать :eyes:'),
             italic('\nЯ просто напомню,'), 'что есть',
-            code('команда'), '/help'
+            code('команда'), '/help',
         )
         await msg.reply(message_text, parse_mode=ParseMode.MARKDOWN)
 
